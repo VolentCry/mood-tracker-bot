@@ -2,7 +2,7 @@ import logging
 import asyncio
 from datetime import datetime, time
 
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -25,11 +25,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Хранилище данных (в памяти) ---
-# Для продакшена лучше использовать базу данных (SQLite, PostgreSQL и т.д.)
 # user_data = { user_id: {"moods": [(timestamp, mood_text)], "notification_time": "HH:MM"} }
 user_data = {}
 
-# --- Состояния для FSM (Finite State Machine) ---
+# --- Машина состояния ---
 class UserStates(StatesGroup):
     waiting_for_notification_time = State()
 
@@ -37,7 +36,7 @@ class UserStates(StatesGroup):
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 bot = Bot(token=BOT_TOKEN)
-scheduler = AsyncIOScheduler(timezone="Europe/Moscow") # Укажите ваш часовой пояс
+scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
 # --- Клавиатуры ---
 def get_main_menu_keyboard():
@@ -53,7 +52,22 @@ def get_mood_selection_keyboard():
         [InlineKeyboardButton(text="😩 Уставшее", callback_data="mood_tired")],
         [InlineKeyboardButton(text="😢 Грустное", callback_data="mood_sad")],
         [InlineKeyboardButton(text="😠 Злое", callback_data="mood_angry")],
-        [InlineKeyboardButton(text="🤩 Восхитительное", callback_data="mood_delighted")]
+        [InlineKeyboardButton(text="🤩 Восхитительное", callback_data="mood_delighted")],
+        [InlineKeyboardButton(text="😖 Раздражённое", callback_data="mood_irritated")],
+        [InlineKeyboardButton(text="🙂 Спокойное", callback_data="mood_calm")],
+        [InlineKeyboardButton(text="⚡️ Энергичное", callback_data="mood_energetic")],
+        [InlineKeyboardButton(text="😰 Тревожное", callback_data="mood_anxious")],
+        [InlineKeyboardButton(text="🤯 Воодушевлённое", callback_data="mood_inspired")],
+        [InlineKeyboardButton(text="🫠 Скучающее", callback_data="mood_bored")],
+        [InlineKeyboardButton(text="🥰 Влюблённое", callback_data="mood_loving")],
+        [InlineKeyboardButton(text="🥱 Безразличное", callback_data="mood_indifferent")],
+        [InlineKeyboardButton(text="😱 Испуганное", callback_data="mood_scared")],
+        [InlineKeyboardButton(text="😎 Гордое", callback_data="mood_proud")],
+        [InlineKeyboardButton(text="😒 Завистливое", callback_data="mood_envious")],
+        [InlineKeyboardButton(text="😓 Растерянное", callback_data="mood_confused")],
+        [InlineKeyboardButton(text="😏 Игривое", callback_data="mood_playful")],
+        [InlineKeyboardButton(text="🤔 Сосредоточенное", callback_data="mood_focused")],
+        [InlineKeyboardButton(text="🤧 Болезненное", callback_data="mood_sick")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -62,14 +76,12 @@ async def send_mood_prompt(user_id: int):
     try:
         await bot.send_message(
             user_id,
-            "👋 Привет! Давай зафиксируем твоё настроение на сегодня.",
-            reply_markup=get_main_menu_keyboard() # Можно сразу отправлять клавиатуру выбора настроения
-            # reply_markup=get_mood_selection_keyboard() # или так, если хотите сразу выбор
+            "👋 Привет! Давай зафиксируем твоё настроение на сегодня.", reply_markup=get_mood_selection_keyboard() # или так, если хотите сразу выбор
         )
         logger.info(f"Отправлено напоминание пользователю {user_id}")
     except Exception as e:
         logger.error(f"Не удалось отправить напоминание пользователю {user_id}: {e}")
-        # Если пользователь заблокировал бота, можно удалить его из расписания
+        # Если пользователь заблокировал бота, то он удаляется из расписания
         if "bot was blocked by the user" in str(e).lower():
             remove_schedule(user_id)
             if user_id in user_data:
@@ -146,10 +158,25 @@ async def process_mood_selection_callback(callback_query: CallbackQuery):
 
     mood_map = {
         "positive": "Положительное 😊",
-        "tired": "Уставшее 😩",
+        "tired": "Усталое 😩",
         "sad": "Грустное 😢",
         "angry": "Злое 😠",
-        "delighted": "Восхитительное 🤩"
+        "delighted": "Восхитительное 🤩",
+        "irritated": "Раздражённое 😖",
+        "calm": "Спокойное 🙂",
+        "energetic": "Энергичное ⚡️",
+        "anxious": "Тревожное 😰",
+        "inspired": "Воодушевлённое 🤯",
+        "bored": "Скучающее 🫠",
+        "loving": "Влюблённое 🥰",
+        "indifferent": "Безразличное 🥱",
+        "scared": "Испуганное 😱",
+        "proud": "Гордое 😎",
+        "envious": "Завистливое 😒",
+        "confused": "Растерянное 😓",
+        "playful": "Игривое 😏",
+        "focused": "Сосредоточенное 🤔",
+        "sick": "Болезненное 🤧"
     }
     mood_text = mood_map.get(mood_choice_code, "Неизвестное")
 
