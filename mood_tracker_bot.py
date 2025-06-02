@@ -1,0 +1,276 @@
+import logging
+import asyncio
+from datetime import datetime, time
+
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart, Command
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from dotenv import load_dotenv
+import os
+
+# --- Конфигурация ---
+load_dotenv("config.env")
+BOT_TOKEN = os.getenv('TOKEN')
+ADMIN_ID = os.getenv('ADMINID')
+
+# --- Логирование ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- Хранилище данных (в памяти) ---
+# Для продакшена лучше использовать базу данных (SQLite, PostgreSQL и т.д.)
+# user_data = { user_id: {"moods": [(timestamp, mood_text)], "notification_time": "HH:MM"} }
+user_data = {}
+
+# --- Состояния для FSM (Finite State Machine) ---
+class UserStates(StatesGroup):
+    waiting_for_notification_time = State()
+
+# --- Инициализация ---
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+bot = Bot(token=BOT_TOKEN)
+scheduler = AsyncIOScheduler(timezone="Europe/Moscow") # Укажите ваш часовой пояс
+
+# --- Клавиатуры ---
+def get_main_menu_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="📝 Запись настроения", callback_data="record_mood")],
+        [InlineKeyboardButton(text="⏰ Настройка времени", callback_data="set_notification_time")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_mood_selection_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="😊 Положительное", callback_data="mood_positive")],
+        [InlineKeyboardButton(text="😩 Уставшее", callback_data="mood_tired")],
+        [InlineKeyboardButton(text="😢 Грустное", callback_data="mood_sad")],
+        [InlineKeyboardButton(text="😠 Злое", callback_data="mood_angry")],
+        [InlineKeyboardButton(text="🤩 Восхитительное", callback_data="mood_delighted")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# --- Функции планировщика ---
+async def send_mood_prompt(user_id: int):
+    try:
+        await bot.send_message(
+            user_id,
+            "👋 Привет! Давай зафиксируем твоё настроение на сегодня.",
+            reply_markup=get_main_menu_keyboard() # Можно сразу отправлять клавиатуру выбора настроения
+            # reply_markup=get_mood_selection_keyboard() # или так, если хотите сразу выбор
+        )
+        logger.info(f"Отправлено напоминание пользователю {user_id}")
+    except Exception as e:
+        logger.error(f"Не удалось отправить напоминание пользователю {user_id}: {e}")
+        # Если пользователь заблокировал бота, можно удалить его из расписания
+        if "bot was blocked by the user" in str(e).lower():
+            remove_schedule(user_id)
+            if user_id in user_data:
+                del user_data[user_id]
+            logger.info(f"Пользователь {user_id} заблокировал бота. Задание и данные удалены.")
+
+
+def schedule_mood_prompt(user_id: int, time_str: str):
+    """Планирует или перепланирует ежедневное напоминание для пользователя."""
+    try:
+        hour, minute = map(int, time_str.split(':'))
+        job_id = f"mood_prompt_{user_id}"
+
+        # Удаляем старое задание, если оно есть
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+            logger.info(f"Старое задание {job_id} удалено.")
+
+        # Добавляем новое задание
+        scheduler.add_job(
+            send_mood_prompt,
+            trigger=CronTrigger(hour=hour, minute=minute, timezone="Europe/Moscow"), # Укажите ваш часовой пояс
+            args=[user_id],
+            id=job_id,
+            replace_existing=True
+        )
+        logger.info(f"Задание {job_id} установлено на {time_str} для пользователя {user_id}")
+        return True
+    except ValueError:
+        logger.error(f"Неверный формат времени: {time_str} для пользователя {user_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при планировании задания для {user_id} на {time_str}: {e}")
+        return False
+
+def remove_schedule(user_id: int):
+    job_id = f"mood_prompt_{user_id}"
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+        logger.info(f"Задание {job_id} удалено для пользователя {user_id}.")
+
+# --- Обработчики команд ---
+@dp.message(CommandStart())
+async def send_welcome(message: Message):
+    user_id = message.from_user.id
+    if user_id not in user_data:
+        user_data[user_id] = {"moods": [], "notification_time": None}
+    await message.answer(
+        f"👋 Привет, {message.from_user.full_name}!\n"
+        "Я твой личный дневник настроения. Давай зафиксируем твоё настроение на сегодня.",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+@dp.message(Command("menu"))
+async def command_menu(message: Message):
+    await message.answer(
+        "Вот основное меню:",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+# --- Обработчики колбэков ---
+@dp.callback_query(lambda c: c.data == "record_mood")
+async def process_record_mood_callback(callback_query: CallbackQuery):
+    await callback_query.message.edit_text(
+        "Выбери какое у тебя сегодня настроение:",
+        reply_markup=get_mood_selection_keyboard()
+    )
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("mood_"))
+async def process_mood_selection_callback(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    mood_choice_code = callback_query.data.split("_")[1]
+
+    mood_map = {
+        "positive": "Положительное 😊",
+        "tired": "Уставшее 😩",
+        "sad": "Грустное 😢",
+        "angry": "Злое 😠",
+        "delighted": "Восхитительное 🤩"
+    }
+    mood_text = mood_map.get(mood_choice_code, "Неизвестное")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if user_id not in user_data:
+        user_data[user_id] = {"moods": [], "notification_time": None}
+
+    user_data[user_id]["moods"].append((timestamp, mood_text))
+
+    await callback_query.message.edit_text(
+        f"Настроение '{mood_text}' записано!\nСпасибо! ✨",
+        reply_markup=None # Убираем кнопки после выбора
+    )
+    await callback_query.answer(text=f"Записано: {mood_text}")
+    logger.info(f"Пользователь {user_id} записал настроение: {mood_text}")
+
+    # Опционально: вернуть главное меню через пару секунд
+    await asyncio.sleep(2)
+    await callback_query.message.answer(
+        "Что дальше?",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
+@dp.callback_query(lambda c: c.data == "set_notification_time")
+async def process_set_time_callback(callback_query: CallbackQuery, state: FSMContext):
+    await state.set_state(UserStates.waiting_for_notification_time)
+    current_time_info = ""
+    if user_data.get(callback_query.from_user.id, {}).get("notification_time"):
+        current_time_info = f"\nТекущее установленное время: {user_data[callback_query.from_user.id]['notification_time']}"
+
+    await callback_query.message.edit_text(
+        "🕒 В какое время (в формате ЧЧ:ММ, например, 09:30 или 18:05) "
+        "ты хотел бы получать напоминание о записи настроения?"
+        f"{current_time_info}\n\nДля отмены введите /cancel.",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+# --- Обработчик ввода времени для уведомлений ---
+@dp.message(UserStates.waiting_for_notification_time)
+async def process_time_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    time_str = message.text.strip()
+
+    if time_str.lower() == "/cancel":
+        await state.clear()
+        await message.answer("Настройка времени отменена.", reply_markup=get_main_menu_keyboard())
+        return
+
+    try:
+        # Простая валидация формата времени
+        parsed_time = time.fromisoformat(time_str) # HH:MM или HH:MM:SS
+        valid_time_str = parsed_time.strftime("%H:%M") # Приводим к HH:MM
+
+        if user_id not in user_data:
+            user_data[user_id] = {"moods": [], "notification_time": None}
+
+        user_data[user_id]["notification_time"] = valid_time_str
+
+        if schedule_mood_prompt(user_id, valid_time_str):
+            await message.answer(
+                f"Отлично! Я буду напоминать тебе записать настроение каждый день в {valid_time_str}.",
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            await message.answer(
+                "Произошла ошибка при установке времени. Пожалуйста, попробуйте еще раз.",
+                reply_markup=get_main_menu_keyboard() # или кнопка "попробовать снова"
+            )
+        await state.clear()
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат времени. Пожалуйста, введи время в формате ЧЧ:ММ (например, 08:00 или 21:30).\n"
+            "Для отмены введите /cancel."
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при обработке времени {time_str} от {user_id}: {e}")
+        await message.answer(
+            "Что-то пошло не так. Попробуйте еще раз.",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+
+# --- Команда для просмотра сохраненных данных (для отладки) ---
+@dp.message(Command("mydata"))
+async def show_my_data(message: Message):
+    user_id = message.from_user.id
+    if user_id in user_data:
+        data_str = f"Ваши данные:\n"
+        if user_data[user_id]["notification_time"]:
+            data_str += f"Время уведомлений: {user_data[user_id]['notification_time']}\n"
+        else:
+            data_str += "Время уведомлений: не установлено\n"
+
+        data_str += "Записи настроения:\n"
+        if user_data[user_id]["moods"]:
+            for ts, mood in user_data[user_id]["moods"][-5:]: # Последние 5 записей
+                data_str += f"  - {ts}: {mood}\n"
+        else:
+            data_str += "  Пока нет записей.\n"
+        await message.answer(data_str)
+    else:
+        await message.answer("У меня пока нет данных о вас.")
+
+# --- Главная функция ---
+async def main():
+    # Загрузка существующих настроек уведомлений при старте (если они есть, например, из БД)
+    # В данном примере user_data - это глобальный словарь, так что он будет пуст при каждом перезапуске,
+    # если не реализовать сохранение/загрузку из файла/БД.
+    # Здесь можно было бы пройтись по сохраненным user_data и добавить задания в scheduler.
+
+    # Запуск планировщика
+    scheduler.start()
+    logger.info("Планировщик запущен.")
+
+    # Запуск бота
+    logger.info("Бот запускается...")
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
