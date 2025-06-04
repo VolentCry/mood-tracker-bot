@@ -15,10 +15,15 @@ from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 import os
 
+from add_mood_to_db import connect_db, add_mood
+
 # --- Конфигурация ---
 load_dotenv("config.env")
 BOT_TOKEN = os.getenv('TOKEN')
 ADMIN_ID = os.getenv('ADMINID')
+
+conn = connect_db()
+
 
 # --- Логирование ---
 logging.basicConfig(level=logging.INFO)
@@ -186,6 +191,8 @@ async def process_mood_selection_callback(callback_query: CallbackQuery):
         user_data[user_id] = {"moods": [], "notification_time": None}
 
     user_data[user_id]["moods"].append((timestamp, mood_text))
+    add_mood(conn, user_id=user_id, mood=mood_text)
+    # conn.close()
 
     await callback_query.message.edit_text(
         f"Настроение '{mood_text}' записано!\nСпасибо! ✨",
