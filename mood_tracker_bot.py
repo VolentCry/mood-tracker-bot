@@ -15,7 +15,8 @@ from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 import os
 
-from add_mood_to_db import connect_db, add_mood
+from add_mood_to_db import connect_db, add_mood, get_all_moods
+from plot_visualisaion import make_and_save_plot
 
 # --- Конфигурация ---
 load_dotenv("config.env")
@@ -274,20 +275,23 @@ async def process_time_input(message: Message, state: FSMContext):
 # --- Команда для просмотра сохраненных данных (для отладки) ---
 @dp.message(Command("mydata"))
 async def show_my_data(message: Message):
+    all_moods = get_all_moods(conn)
     user_id = message.from_user.id
-    if user_id in user_data:
+    if all_moods != []:
         data_str = f"Ваши данные:\n"
-        if user_data[user_id]["notification_time"]:
-            data_str += f"Время уведомлений: {user_data[user_id]['notification_time']}\n"
-        else:
-            data_str += "Время уведомлений: не установлено\n"
+        # if user_data[user_id]["notification_time"]:
+        #     data_str += f"Время уведомлений: {user_data[user_id]['notification_time']}\n"
+        # else:
+        #     data_str += "Время уведомлений: не установлено\n"
 
         data_str += "Записи настроения:\n"
-        if user_data[user_id]["moods"]:
-            for ts, mood in user_data[user_id]["moods"][-5:]: # Последние 5 записей
-                data_str += f"  - {ts}: {mood}\n"
+        if all_moods != []:
+            all_moods = get_all_moods(conn)
+            for record in all_moods[:5]:
+                data_str += f"  - {record[2]}: {record[1]}\n"
         else:
             data_str += "  Пока нет записей.\n"
+        data_str += "Выше представлены 5 последних записей."
         await message.answer(data_str)
     else:
         await message.answer("У меня пока нет данных о вас.")
