@@ -30,7 +30,7 @@ def add_mood(conn, user_id, mood, mood_id):
     ''', (user_id, mood, timestamp, mood_id))
     conn.commit()
 
-def add_user_notification(conn, time: str, user_id: int, time_zone="МСК"):
+def add_user_notification(conn, time: str, user_id: int, time_zone="0"):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO users (user_id, notification_time, time_zone)
