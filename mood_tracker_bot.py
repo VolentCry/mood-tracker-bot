@@ -187,11 +187,13 @@ async def process_mood_selection_callback(callback_query: CallbackQuery):
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    mood_ID = list(mood_map.keys()).index(mood_choice_code)
+
     if user_id not in user_data:
         user_data[user_id] = {"moods": [], "notification_time": None}
 
     user_data[user_id]["moods"].append((timestamp, mood_text))
-    add_mood(conn, user_id=user_id, mood=mood_text)
+    add_mood(conn, user_id=user_id, mood=mood_text, mood_id=mood_ID)
     # conn.close()
 
     await callback_query.message.edit_text(
@@ -202,7 +204,6 @@ async def process_mood_selection_callback(callback_query: CallbackQuery):
     logger.info(f"Пользователь {user_id} записал настроение: {mood_text}")
 
     # Опционально: вернуть главное меню через пару секунд
-    await asyncio.sleep(2)
     await callback_query.message.answer(
         "Что дальше?",
         reply_markup=get_main_menu_keyboard()
