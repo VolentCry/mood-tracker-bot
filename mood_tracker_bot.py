@@ -15,7 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 import os
 
-from add_mood_to_db import connect_db, add_mood, get_all_moods
+from add_mood_to_db import *
 from plot_visualisaion import make_and_save_plot
 
 # --- Конфигурация ---
@@ -24,6 +24,7 @@ BOT_TOKEN = os.getenv('TOKEN')
 ADMIN_ID = os.getenv('ADMINID')
 
 conn = connect_db()
+conn2 = connect_db(db_name="users.db")
 
 
 # --- Логирование ---
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 # --- Хранилище данных (в памяти) ---
 # user_data = { user_id: {"moods": [(timestamp, mood_text)], "notification_time": "HH:MM"} }
 user_data = {}
+user_time_zone = None
 
 # --- Машина состояния ---
 class UserStates(StatesGroup):
@@ -242,10 +244,17 @@ async def process_time_input(message: Message, state: FSMContext):
         parsed_time = time.fromisoformat(time_str) # HH:MM или HH:MM:SS
         valid_time_str = parsed_time.strftime("%H:%M") # Приводим к HH:MM
 
-        if user_id not in user_data:
-            user_data[user_id] = {"moods": [], "notification_time": None}
-
-        user_data[user_id]["notification_time"] = valid_time_str
+        # Проверка на наличие пользователя в базе
+        if check_user_in_table(conn=conn2, user_id=user_id) == False: # Ещё никого нет в базе
+            add_user_notification(conn=conn2, user_id=user_id, time=valid_time_str, time_zone=user_time_zone)
+        else:
+            if user_id in check_user_in_table(conn=conn2, user_id=user_id): # Пользователь есть в базе
+                update_time_notification(conn2, user_id, valid_time_str)
+            else: # Пользователя нет в базе
+                if user_time_zone == None:
+                    add_user_notification(conn=conn2, user_id=user_id, time=valid_time_str)
+                else:
+                    add_user_notification(conn=conn2, user_id=user_id, time=valid_time_str, time_zone=user_time_zone)
 
         if schedule_mood_prompt(user_id, valid_time_str):
             await message.answer(
@@ -296,13 +305,43 @@ async def show_my_data(message: Message):
     else:
         await message.answer("У меня пока нет данных о вас.")
 
+def get_timezone_keyboard():
+    timezones = [
+        {'label': 'МСК (UTC+3)', 'offset': 0},
+        {'label': 'МСК-1 (UTC+2)', 'offset': -1},
+        {'label': 'МСК+1 (UTC+4)', 'offset': 1},
+        {'label': 'МСК+2 (UTC+5)', 'offset': 2},
+        {'label': 'МСК+3 (UTC+6)', 'offset': 3},
+        {'label': 'МСК+4 (UTC+7)', 'offset': 4},
+        {'label': 'МСК+5 (UTC+8)', 'offset': 5},
+        {'label': 'МСК-2 (UTC+1)', 'offset': -2},
+        {'label': 'МСК-3 (UTC+0)', 'offset': -3},
+    ]
+    keyboard = [ [InlineKeyboardButton(text=tz['label'], callback_data=f"timezone_{tz['offset']}")] for tz in timezones]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+@dp.message(Command("set_timezone"))
+async def send_timezone_keyboard(message: Message):
+    await message.answer("Пожалуйста, выберите ваш часовой пояс относительно МСК:", reply_markup=get_timezone_keyboard())
+
+@dp.callback_query(lambda c: c.data.startswith("timezone_"))
+async def handle_timezone_choice(callback: CallbackQuery):
+    global user_time_zone
+    offset = int(callback.data.split("_")[1])
+    user_time_zone = f"{offset:+d}"
+    await callback.answer(f"Вы выбрали часовой пояс: МСК{offset:+d}")
+    await callback.message.edit_text(f"Вы выбрали часовой пояс: МСК{offset:+d}")
+
+    # Проверка на наличие пользователя в базе
+    user_id = callback.from_user.id
+    if check_user_in_table(conn=conn2, user_id=user_id) == False: # Ещё никого нет в базе
+        pass
+    else:
+        if user_id in check_user_in_table(conn=conn2, user_id=user_id): # Пользователь есть в базе
+            update_time_zone(conn2, user_id, user_time_zone)
+
 # --- Главная функция ---
 async def main():
-    # Загрузка существующих настроек уведомлений при старте (если они есть, например, из БД)
-    # В данном примере user_data - это глобальный словарь, так что он будет пуст при каждом перезапуске,
-    # если не реализовать сохранение/загрузку из файла/БД.
-    # Здесь можно было бы пройтись по сохраненным user_data и добавить задания в scheduler.
-
     # Запуск планировщика
     scheduler.start()
     logger.info("Планировщик запущен.")

@@ -30,11 +30,57 @@ def add_mood(conn, user_id, mood, mood_id):
     ''', (user_id, mood, timestamp, mood_id))
     conn.commit()
 
+def add_user_notification(conn, time: str, user_id: int, time_zone="МСК"):
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO users (user_id, notification_time, time_zone)
+        VALUES (?, ?, ?)
+    ''', (user_id, time, time_zone))
+    conn.commit()
+
+def check_user_in_table(conn, user_id: int):
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id, notification_time, time_zone FROM users')
+    rows = cursor.fetchall()
+    users_list = []
+    if rows == []:
+        return False
+    else: 
+        for i in rows:
+            users_list.append(i[0])
+    return users_list
+
+
 def get_all_moods(conn):
     cursor = conn.cursor()
     cursor.execute('SELECT user_id, mood, timestamp, mood_id FROM moods')
     rows = cursor.fetchall()
     return rows
+
+def update_time_notification(conn, user_id, new_time: str):
+    cursor = conn.cursor()
+    cursor.execute(
+        'UPDATE users SET notification_time = ? WHERE user_id = ?',
+        (new_time, user_id)
+    )
+    conn.commit()
+
+def update_time_zone(conn, user_id, new_timezone: str):
+    cursor = conn.cursor()
+    cursor.execute(
+        'UPDATE users SET time_zone = ? WHERE user_id = ?',
+        (new_timezone, user_id)
+    )
+    conn.commit()
+
+def get_time_zone(conn, user_id: int):
+    """Извлекает значения врмеенного пояса пользователя"""
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id, notification_time, time_zone FROM users')
+    rows = cursor.fetchall()
+    for i in rows:
+        if i[0] == user_id: return i[2]
+
 
 # Пример использования
 # if __name__ == '__main__':
@@ -47,3 +93,4 @@ def get_all_moods(conn):
     # # Пример добавления записи
     # add_mood(conn, user_id=123456789, mood='отличное')
     # conn.close()
+
