@@ -8,6 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types.input_file import FSInputFile
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -319,6 +320,16 @@ async def show_my_data(message: Message):
         await message.answer(data_str)
     else:
         await message.answer("У меня пока нет данных о вас.")
+
+# --- Команда для просмотра отчёта настроения в виде картинки ---
+@dp.message(Command("mood_plot"))
+async def show_my_mood_plot(message: Message):
+    year = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[:4]
+    months_list = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    month = months_list[int(str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[6:7]) - 1]
+    path_to_plot = make_and_save_plot(message.from_user.id, month)
+    photo = FSInputFile(path_to_plot)
+    await bot.send_photo(message.chat.id, photo=photo, caption=f"Вот ваша диаграмма за {month} {year} год(а)")
 
 def get_timezone_keyboard():
     timezones = [

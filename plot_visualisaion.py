@@ -48,7 +48,7 @@ mood_map_counter = {
     "19": 0
 }
 
-months = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+print(int("05"))
 
 
 def make_and_save_plot(user_id: int, month: str):
@@ -82,4 +82,5 @@ def make_and_save_plot(user_id: int, month: str):
     ax.set_title(month, pad=19)
     plt.savefig(fr'monthly chart\{user_id}_mood_plot_{month}.png', dpi=300)
     return fr'monthly chart\{user_id}_mood_plot_{month}.png'
+
 
