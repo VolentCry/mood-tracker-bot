@@ -48,9 +48,6 @@ mood_map_counter = {
     "19": 0
 }
 
-print(int("05"))
-
-
 def make_and_save_plot(user_id: int, month: str):
     """Функция, которая генерирует график настроения за всё время и сохраняет его как изображение"""
     conn = connect_db()
