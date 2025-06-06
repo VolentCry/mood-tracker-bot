@@ -310,7 +310,8 @@ async def show_my_data(message: Message):
         data_str += "Записи настроения:\n"
         if all_moods != []:
             all_moods = get_all_moods(conn)
-            for record in all_moods[:5]:
+            five_moods = reversed(all_moods[-5:])
+            for record in five_moods:
                 data_str += f"  - {record[2]}: {record[1]}\n"
         else:
             data_str += "  Пока нет записей.\n"

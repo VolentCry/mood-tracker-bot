@@ -48,8 +48,10 @@ mood_map_counter = {
     "19": 0
 }
 
+months = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
-def make_and_save_plot():
+
+def make_and_save_plot(user_id: int, month: str):
     """Функция, которая генерирует график настроения за всё время и сохраняет его как изображение"""
     conn = connect_db()
     all_moods = get_all_moods(conn)
@@ -77,10 +79,7 @@ def make_and_save_plot():
     fig, ax = plt.subplots()
     ax.pie(vals, labels=labels, autopct='%1.1f%%')
     ax.axis("equal")
-    num_of_plot_file = 0
-    if os.listdir("monthly chart") == []: 
-        plt.savefig(r'monthly chart\plot1.png', dpi=300); num_of_plot_file = 1
-    else: 
-        num_of_plot_file = int(os.listdir("monthly chart")[-1].replace(".png", "").replace("plot", "")) + 1
-        plt.savefig(fr'monthly chart\plot{num_of_plot_file}.png', dpi=300)
-    return fr'monthly chart\plot{num_of_plot_file}.png'
+    ax.set_title(month, pad=19)
+    plt.savefig(fr'monthly chart\{user_id}_mood_plot_{month}.png', dpi=300)
+    return fr'monthly chart\{user_id}_mood_plot_{month}.png'
+
