@@ -16,7 +16,7 @@
 <p>You will be able to set up systematic notifications at certain times according to your time zone with an offer to record your mood.</p>
 <p>And at any time you can explore your mood statistics for each month in the form of a pie chart provided by the bot.</p>
 
-<h3Instructions:</h3>
+<h3>Instructions:</h3>
 <ol>
     <li>Open the user_config.txt file</li>
     <li>Enter the necessary data specified in the file</li>
