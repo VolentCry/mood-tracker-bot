@@ -51,7 +51,8 @@ scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 def get_main_menu_keyboard():
     buttons = [
         [InlineKeyboardButton(text="📝 Запись настроения", callback_data="record_mood")],
-        [InlineKeyboardButton(text="⏰ Настройка времени", callback_data="set_notification_time")]
+        [InlineKeyboardButton(text="⏰ Настройка времени", callback_data="set_notification_time")],
+        [InlineKeyboardButton(text="📈 График настроения", callback_data="plot")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -152,6 +153,16 @@ async def command_menu(message: Message):
     )
 
 # --- Обработчики колбэков ---
+@dp.callback_query(lambda c: c.data == "plot")
+async def show_my_mood_plot(callback_query: CallbackQuery):
+    year = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[:4]
+    months_list = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    month = months_list[int(str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[6:7]) - 1]
+    path_to_plot = make_and_save_plot(callback_query.from_user.id, month)
+    photo = FSInputFile(path_to_plot)
+    await bot.send_photo(callback_query.chat.id, photo=photo, caption=f"Вот ваша диаграмма за {month} {year} год(а)")
+    await callback_query.answer()
+
 @dp.callback_query(lambda c: c.data == "record_mood")
 async def process_record_mood_callback(callback_query: CallbackQuery):
     await callback_query.message.edit_text(
@@ -330,6 +341,8 @@ async def show_my_mood_plot(message: Message):
     path_to_plot = make_and_save_plot(message.from_user.id, month)
     photo = FSInputFile(path_to_plot)
     await bot.send_photo(message.chat.id, photo=photo, caption=f"Вот ваша диаграмма за {month} {year} год(а)")
+
+
 
 def get_timezone_keyboard():
     timezones = [

@@ -80,17 +80,3 @@ def get_time_zone(conn, user_id: int):
     rows = cursor.fetchall()
     for i in rows:
         if i[0] == user_id: return i[2]
-
-
-# Пример использования
-# if __name__ == '__main__':
-#     conn = connect_db()
-#     create_table(conn)
-#     all_moods = get_all_moods(conn)
-#     for record in all_moods:
-#         print(f'Mood: {record[1]}, Mood ID: {record[3]}')
-#     conn.close()
-    # # Пример добавления записи
-    # add_mood(conn, user_id=123456789, mood='отличное')
-    # conn.close()
-
