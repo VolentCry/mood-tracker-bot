@@ -106,3 +106,4 @@ def get_available_months(user_id: int) -> list:
             available_months.add(month)
     
     return sorted(list(available_months))
+

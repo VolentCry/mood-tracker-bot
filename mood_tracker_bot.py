@@ -20,9 +20,15 @@ from add_mood_to_db import *
 from plot_visualisaion import make_and_save_plot
 
 # --- Конфигурация ---
-load_dotenv("config.env")
-BOT_TOKEN = os.getenv('TOKEN')
-ADMIN_ID = os.getenv('ADMINID')
+# load_dotenv("config.env")
+# BOT_TOKEN = os.getenv('TOKEN')
+# ADMIN_ID = os.getenv('ADMINID')
+
+
+f = open("user_config.txt")
+BOT_TOKEN = f.readline().replace("TOKEN=", "").replace("\n", "")
+ADMIN_ID = f.readline().replace("ADMINID=", "")
+f.close()
 
 conn = connect_db()
 conn2 = connect_db(db_name="users.db")
