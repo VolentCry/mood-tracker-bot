@@ -81,6 +81,24 @@ def get_mood_selection_keyboard():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def get_month_selection_keyboard(available_months: list):
+    """Создает клавиатуру для выбора месяца"""
+    months_list = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    buttons = []
+    for month_num in available_months:
+        month_name = months_list[int(month_num) - 1]
+        buttons.append([InlineKeyboardButton(text=month_name, callback_data=f"month_{month_num}")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_pagination_keyboard(current_page: int, total_pages: int, user_id: int):
+    """Создает клавиатуру для пагинации"""
+    buttons = []
+    if current_page > 0:
+        buttons.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"page_{user_id}_{current_page-1}"))
+    if current_page < total_pages - 1:
+        buttons.append(InlineKeyboardButton(text="Вперёд ▶️", callback_data=f"page_{user_id}_{current_page+1}"))
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])
+
 # --- Функции планировщика ---
 async def send_mood_prompt(user_id: int):
     try:
@@ -141,7 +159,7 @@ async def send_welcome(message: Message):
         user_data[user_id] = {"moods": [], "notification_time": None}
     await message.answer(
         f"👋 Привет, {message.from_user.full_name}!\n"
-        "Я твой личный дневник настроения. Давай зафиксируем твоё настроение на сегодня.",
+        "Я твой личный дневник настроения. Давай зафиксируем твоё состояние на сегодня.",
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -154,13 +172,39 @@ async def command_menu(message: Message):
 
 # --- Обработчики колбэков ---
 @dp.callback_query(lambda c: c.data == "plot")
-async def show_my_mood_plot(callback_query: CallbackQuery):
+async def show_month_selection(callback_query: CallbackQuery):
+    from plot_visualisaion import get_available_months
+    
+    available_months = get_available_months(callback_query.from_user.id)
+    if not available_months:
+        await callback_query.message.edit_text(
+            "У вас пока нет записей настроения. Сначала сделайте несколько записей!",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await callback_query.answer()
+        return
+    
+    await callback_query.message.edit_text(
+        "Выберите месяц для просмотра статистики:",
+        reply_markup=get_month_selection_keyboard(available_months)
+    )
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("month_"))
+async def show_selected_month_plot(callback_query: CallbackQuery):
+    month = callback_query.data.split("_")[1]
     year = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[:4]
     months_list = ["Январь", 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
-    month = months_list[int(str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))[6:7]) - 1]
+    month_name = months_list[int(month) - 1]
+    
     path_to_plot = make_and_save_plot(callback_query.from_user.id, month)
     photo = FSInputFile(path_to_plot)
-    await bot.send_photo(callback_query.chat.id, photo=photo, caption=f"Вот ваша диаграмма за {month} {year} год(а)")
+    await bot.send_photo(
+        callback_query.message.chat.id, 
+        photo=photo, 
+        caption=f"Вот ваша диаграмма за {month_name} {year} год(а)",
+        reply_markup=get_main_menu_keyboard()
+    )
     await callback_query.answer()
 
 @dp.callback_query(lambda c: c.data == "record_mood")
@@ -312,25 +356,68 @@ async def process_time_input(message: Message, state: FSMContext):
 async def show_my_data(message: Message):
     all_moods = get_all_moods(conn)
     user_id = message.from_user.id
-    if all_moods != []:
-        data_str = f"Ваши данные:\n"
-        # if user_data[user_id]["notification_time"]:
-        #     data_str += f"Время уведомлений: {user_data[user_id]['notification_time']}\n"
-        # else:
-        #     data_str += "Время уведомлений: не установлено\n"
-
-        data_str += "Записи настроения:\n"
-        if all_moods != []:
-            all_moods = get_all_moods(conn)
-            five_moods = reversed(all_moods[-5:])
-            for record in five_moods:
-                data_str += f"  - {record[2]}: {record[1]}\n"
-        else:
-            data_str += "  Пока нет записей.\n"
-        data_str += "Выше представлены 5 последних записей."
-        await message.answer(data_str)
-    else:
+    user_moods = [record for record in all_moods if record[0] == user_id]
+    
+    if not user_moods:
         await message.answer("У меня пока нет данных о вас.")
+        return
+
+    # Показываем последние 5 записей и кнопку для просмотра всех
+    data_str = "Ваши последние 5 записей:\n\n"
+    five_moods = reversed(user_moods[-5:])
+    for record in five_moods:
+        data_str += f"  - {record[2]}: {record[1]}\n"
+    
+    buttons = [[InlineKeyboardButton(text="📋 Показать все записи", callback_data=f"show_all_{user_id}_0")]]
+    await message.answer(data_str, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+@dp.callback_query(lambda c: c.data.startswith("show_all_"))
+async def show_all_records(callback_query: CallbackQuery):
+    parts = callback_query.data.split("_")
+    user_id = int(parts[2])
+    page = int(parts[3]) if len(parts) > 3 else 0
+    
+    all_moods = get_all_moods(conn)
+    user_moods = [record for record in all_moods if record[0] == user_id]
+    user_moods.reverse()  # Сортируем от новых к старым
+    
+    records_per_page = 30
+    total_pages = (len(user_moods) + records_per_page - 1) // records_per_page
+    
+    start_idx = page * records_per_page
+    end_idx = min(start_idx + records_per_page, len(user_moods))
+    
+    data_str = f"Ваши записи (страница {page + 1} из {total_pages}):\n\n"
+    for record in user_moods[start_idx:end_idx]:
+        data_str += f"  - {record[2]}: {record[1]}\n"
+    
+    keyboard = get_pagination_keyboard(page, total_pages, user_id)
+    await callback_query.message.edit_text(data_str, reply_markup=keyboard)
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("page_"))
+async def handle_pagination(callback_query: CallbackQuery):
+    parts = callback_query.data.split("_")
+    user_id = int(parts[1])
+    page = int(parts[2])
+    
+    all_moods = get_all_moods(conn)
+    user_moods = [record for record in all_moods if record[0] == user_id]
+    user_moods.reverse()  # Сортируем от новых к старым
+    
+    records_per_page = 30
+    total_pages = (len(user_moods) + records_per_page - 1) // records_per_page
+    
+    start_idx = page * records_per_page
+    end_idx = min(start_idx + records_per_page, len(user_moods))
+    
+    data_str = f"Ваши записи (страница {page + 1} из {total_pages}):\n\n"
+    for record in user_moods[start_idx:end_idx]:
+        data_str += f"  - {record[2]}: {record[1]}\n"
+    
+    keyboard = get_pagination_keyboard(page, total_pages, user_id)
+    await callback_query.message.edit_text(data_str, reply_markup=keyboard)
+    await callback_query.answer()
 
 # --- Команда для просмотра отчёта настроения в виде картинки ---
 @dp.message(Command("mood_plot"))
