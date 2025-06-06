@@ -243,6 +243,20 @@ async def process_time_input(message: Message, state: FSMContext):
         # Простая валидация формата времени
         parsed_time = time.fromisoformat(time_str) # HH:MM или HH:MM:SS
         valid_time_str = parsed_time.strftime("%H:%M") # Приводим к HH:MM
+        user_time = valid_time_str # Время, котолрое отобразиться у юзера в сообщении
+
+        plus_to_time = get_time_zone(conn2, user_id)
+
+        # Перевод всего времени к Московскому
+        if plus_to_time != 0 or plus_to_time != None:
+            new_hour = int(valid_time_str[:2]) - int(eval(plus_to_time))
+            if 0 <= new_hour <= 9: 
+                valid_time_str = "0" + str(new_hour) + valid_time_str[2:]
+            elif new_hour < 0: 
+                new_hour = 24 - abs(new_hour)
+                valid_time_str = str(new_hour) + valid_time_str[2:]
+            else:
+                valid_time_str = str(new_hour) + valid_time_str[2:]
 
         # Проверка на наличие пользователя в базе
         if check_user_in_table(conn=conn2, user_id=user_id) == False: # Ещё никого нет в базе
@@ -256,15 +270,9 @@ async def process_time_input(message: Message, state: FSMContext):
                 else:
                     add_user_notification(conn=conn2, user_id=user_id, time=valid_time_str, time_zone=user_time_zone)
 
-        plus_to_time = get_time_zone(conn2, user_id)
-        if plus_to_time != 0 or plus_to_time != None:
-            new_hour = int(valid_time_str[:2]) - int(eval(plus_to_time))
-            if 0 <= new_hour <= 9: valid_time_str = "0" + str(new_hour) + valid_time_str[2:]
-            elif new_hour < 0: new_hour = 24 - abs(new_hour); valid_time_str = str(new_hour) + valid_time_str[2:]
-            print(valid_time_str)
         if schedule_mood_prompt(user_id, valid_time_str):
             await message.answer(
-                f"Отлично! Я буду напоминать тебе записать настроение каждый день в {valid_time_str}.",
+                f"Отлично! Я буду напоминать тебе записать настроение каждый день в {user_time}.",
                 reply_markup=get_main_menu_keyboard()
             )
         else:

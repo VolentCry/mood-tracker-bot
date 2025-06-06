@@ -84,6 +84,3 @@ def make_and_save_plot():
         num_of_plot_file = int(os.listdir("monthly chart")[-1].replace(".png", "").replace("plot", "")) + 1
         plt.savefig(fr'monthly chart\plot{num_of_plot_file}.png', dpi=300)
     return fr'monthly chart\plot{num_of_plot_file}.png'
-
-
-print(eval("-2"))
