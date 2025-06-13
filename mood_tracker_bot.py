@@ -310,15 +310,15 @@ async def process_time_input(message: Message, state: FSMContext):
         plus_to_time = get_time_zone(conn2, user_id)
 
         # Перевод всего времени к Московскому
-        if plus_to_time != 0 or plus_to_time != None:
-            new_hour = int(valid_time_str[:2]) - int(eval(plus_to_time))
-            if 0 <= new_hour <= 9: 
-                valid_time_str = "0" + str(new_hour) + valid_time_str[2:]
-            elif new_hour < 0: 
-                new_hour = 24 - abs(new_hour)
-                valid_time_str = str(new_hour) + valid_time_str[2:]
-            else:
-                valid_time_str = str(new_hour) + valid_time_str[2:]
+        if plus_to_time == None: plus_to_time = "0"
+        new_hour = int(valid_time_str[:2]) - int(eval(plus_to_time))
+        if 0 <= new_hour <= 9: 
+            valid_time_str = "0" + str(new_hour) + valid_time_str[2:]
+        elif new_hour < 0: 
+            new_hour = 24 - abs(new_hour)
+            valid_time_str = str(new_hour) + valid_time_str[2:]
+        else:
+            valid_time_str = str(new_hour) + valid_time_str[2:]
 
         # Проверка на наличие пользователя в базе
         if check_user_in_table(conn=conn2, user_id=user_id) == False: # Ещё никого нет в базе
