@@ -1,3 +1,8 @@
+"""
+Python 3.13.3
+aiogram 3.19.0
+"""
+
 import logging
 import asyncio
 from datetime import datetime, time
